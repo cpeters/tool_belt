@@ -10,9 +10,9 @@ module ToolBelt
       @commit = args.fetch(:commit, false)
     end
 
-    def execute(command)
+    def execute(command, silence_errors = false)
       if @commit
-        syscall(command)
+        syscall(command, silence_errors)
       else
         puts "[noop] #{command}"
         return "", true
@@ -21,15 +21,17 @@ module ToolBelt
 
     private
 
-    def syscall(*cmd)
+    def syscall(*cmd, silence_errors)
       puts cmd
       stdout, stderr, status = Open3.capture3(*cmd)
       if status.success?
         return stdout.slice!(1..-(1 + $INPUT_RECORD_SEPARATOR.size)), status.success? # strip trailing eol
       else
-        puts "ERROR: #{stdout}" unless stdout.empty?
-        puts "ERROR: #{stderr}" unless stderr.empty?
-        status.success?
+        unless silence_errors
+          puts "ERROR: #{stdout}" unless stdout.empty?
+          puts "ERROR: #{stderr}" unless stderr.empty?
+          status.success?
+        end
       end
     end
 
