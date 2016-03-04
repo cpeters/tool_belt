@@ -1,5 +1,6 @@
 require 'rest-client'
 require 'json'
+require 'rodzilla'
 
 class RedHatBugzilla
 
@@ -8,6 +9,7 @@ class RedHatBugzilla
   def initialize(user, password)
     @user = user
     @password = password
+    @service = Rodzilla::WebService.new(HOSTNAME, @user, @password, :json)
   end
 
   def get_bug(id, fields = default_fields)
@@ -18,8 +20,9 @@ class RedHatBugzilla
     })
   end
 
-  def bugs_for_release(target_milestone, options = {})
+  def bugs_for_release(options = {})
     status = options.fetch(:status, ["POST"])
+    target_milestone = options.fetch(:target_milestone, nil)
 
     # status params are case sensitive
     status = status.upcase if status.respond_to?(:upcase)
@@ -29,10 +32,7 @@ class RedHatBugzilla
       :product => "Red Hat Satellite 6",
       :query_format => "advanced",
       :status => status,
-      :include_fields => default_fields,
-      :f1 => "target_milestone",
-      :o1 => "equals",
-      :v1 => "#{target_milestone}"
+      :include_fields => default_fields
     }
 
     param_acc = 1
@@ -84,7 +84,41 @@ class RedHatBugzilla
 
   def default_fields
     # %w(id status severity component summary target_milestone flags comments assigned_to keywords url blocks product)
-    %w(id status target_milestone flags url blocks product)
+    %w(id status target_milestone flags url blocks product summary assigned_to)
+  end
+
+  def get_needs_cherry_pick
+    @service.bugs.search({
+      :query_format => "advanced",
+      :f1 => 'cf_devel_whiteboard',
+      :o1 => 'substring',
+      :v1 => 'needs_cherrypick'
+    })
+  end
+
+  def set_needs_cherry_pick(bug_ids)
+    bug_ids.each do |bug_id|
+      bug = @service.bugs.get(ids: [bug_id])['bugs'].first
+      devel_whiteboard = bug['cf_devel_whiteboard']
+
+      if devel_whiteboard.nil? || !devel_whiteboard.include?('needs_cherrypick')
+        puts "Setting to needs cherrypick"
+        @service.bugs.update(ids: [bug_id], cf_devel_whiteboard: "#{devel_whiteboard} needs_cherrypick")
+      end
+    end
+  end
+
+  def clear_needs_cherry_pick(bug_ids)
+    bug_ids.each do |bug_id|
+      bug = @service.bugs.get(ids: [bug_id])['bugs'].first
+      devel_whiteboard = bug['cf_devel_whiteboard']
+
+      if devel_whiteboard.include?('needs_cherrypick')
+        devel_whiteboard = devel_whiteboard.sub('needs_cherrypick', '')
+        puts "Clearing needs cherrypick"
+        @service.bugs.update(ids: [bug_id], cf_devel_whiteboard: devel_whiteboard)
+      end
+    end
   end
 
 end

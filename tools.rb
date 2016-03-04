@@ -10,6 +10,7 @@ class MainCommand < Clamp::Command
   subcommand "changelog", "Generate changelog for a given release", ToolBelt::Command::ChangelogCommand
   subcommand "setup-environment", "Setup release environment for a given configuration", ToolBelt::Command::SetupEnvironmentCommand
   subcommand "pulp-repo-update", "Update Katello's Pulp repository based on parameters", ToolBelt::Command::PulpRepositoryUpdateCommand
+  subcommand "bugzilla", "Commands to interact with bugzilla", ToolBelt::Command::BugzillaCommand
 
 end
 

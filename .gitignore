@@ -50,3 +50,4 @@ doc/graphs/*.svg
 .ruby-gemset
 *.swo
 *.swn
+.byebug_history
