@@ -6,6 +6,13 @@ class RedHatBugzilla
 
   HOSTNAME = 'https://bugzilla.redhat.com/jsonrpc.cgi'
 
+  FLAGS = [
+    {:option => "equals", :value => "pm_ack+"},
+    {:option => "equals", :value => "devel_ack+"},
+    {:option => "equals", :value => "qa_ack+"},
+    {:option => "equals", :value => "sat-6.2.0+"}
+  ]
+
   def initialize(user, password)
     @user = user
     @password = password
@@ -35,17 +42,21 @@ class RedHatBugzilla
       :include_fields => default_fields
     }
 
+    params.merge!(
+      :f1 => 'cf_devel_whiteboard',
+      :o1 => 'notsubstring',
+      :v1 => 'needs_cherrypick'
+    )
+
     param_acc = 1
 
-    if options[:flags]
-      options[:flags].each do |flag|
-        param_acc = param_acc + 1
-        params.merge!({
-          "f#{param_acc}".to_sym => "flagtypes.name",
-          "o#{param_acc}".to_sym => flag[:option],
-          "v#{param_acc}".to_sym => flag[:value]
-        })
-      end
+    FLAGS.each do |flag|
+      param_acc = param_acc + 1
+      params.merge!({
+        "f#{param_acc}".to_sym => "flagtypes.name",
+        "o#{param_acc}".to_sym => flag[:option],
+        "v#{param_acc}".to_sym => flag[:value]
+      })
     end
 
     params[:limit] = options.fetch(:limit, 0)
