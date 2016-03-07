@@ -51,3 +51,4 @@ doc/graphs/*.svg
 *.swo
 *.swn
 .byebug_history
+releases/

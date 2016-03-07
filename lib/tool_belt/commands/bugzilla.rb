@@ -25,7 +25,7 @@ module ToolBelt
 
       end
 
-      subcommand "cherry-pick-list", "Returns list of BZs flagged for cherry pick" do
+      subcommand "list-cherry-pick-bugs", "Returns list of BZs flagged for cherry pick" do
 
         option "--config", 'CONFIG', "Config file containing credentials to talk to Bugzilla", :required => true
 
@@ -41,6 +41,46 @@ module ToolBelt
           File.open('bugs.json', 'w') do |file|
             file.write(bugs.to_json)
           end
+        end
+
+      end
+
+      subcommand "cherry-pick", "Generate cherry pick output " do
+
+        parameter "config_file", "Release configuration file"
+        option "--credentials", 'CREDENTIALS', "Config file containing credentials to talk to Bugzilla", :required => false
+        option "--username", 'USERNAME', "Bugzilla username", :required => false
+        option "--password", 'PASSWORD', "Bugzilla password", :required => false
+
+        def execute
+          if !@credentials && !@username && !@password
+            puts "Must specify a credentials file or username and password"
+          elsif !@username && @password
+          elsif @username && !@password
+          end
+
+          config = ToolBelt::Config.new(config_file, nil, true)
+          release_environment = ToolBelt::ReleaseEnvironment.new(config.options.repos, config.options.namespace)
+          release_environment.setup
+
+          if @credentials
+            credentials = YAML.load_file(@credentials)
+            @username = credentials['username']
+            @password = credentials['password']
+          end
+
+          puts @username
+          bz = RedHatBugzilla.new(username, password)
+
+          bugs = bz.get_needs_cherry_pick
+          redmine_urls = bugs["bugs"].collect { |bug| bug['url'] }
+          redmine_urls = redmine_urls.reject(&:empty?)
+
+          issues = redmine_urls.collect do |issue|
+            Redmine::Issue.new(issue.split('/').last, :include => 'changesets').raw_data['issue']
+          end
+
+          ToolBelt::CherryPicker.new(config.options, release_environment, issues)
         end
 
       end
