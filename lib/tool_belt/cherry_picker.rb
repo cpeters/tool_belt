@@ -8,13 +8,19 @@ require File.join(File.dirname(__FILE__), 'systools')
 module ToolBelt
   class CherryPicker
 
-    attr_accessor :bugzilla, :ignores, :issues, :release_environment
+    attr_accessor :bugzilla, :ignores, :issues, :release_environment,
+                  :issues_open_redmine, :issues_missing_changeset, :issues_cherrypick_not_needed
 
     def initialize(config, release_environment, issues)
       self.bugzilla = config.bugzilla || false
       self.ignores = config.ignores || []
       self.issues = issues
       self.release_environment = release_environment
+
+      self.issues_open_redmine = []
+      self.issues_missing_changeset = []
+      self.issues_cherrypick_not_needed = []
+
       picks = find_cherry_picks(config.project, config.release, release_environment.repo_names)
       write_cherry_pick_log(picks, config.release)
     end
@@ -23,18 +29,15 @@ module ToolBelt
       picks = []
 
       open_issues = @issues.select { |issue| issue['closed_on'].nil? }
-      open_issues.each do |issue|
-        write_log_file("#{release}", "open_issues_#{release}", log_entry(issue).to_yaml, 'a')
-      end
+      open_issues.each { |issue| @issues_open_redmine << log_entry(issue) }
 
       closed_issues = @issues.select { |issue| !issue['closed_on'].nil? }
-
       closed_issues.each do |issue|
         revisions = []
         commits = issue['changesets']
 
         if commits.empty?
-          write_log_file("#{release}", "missing_changset_#{release}", log_entry(issue).to_yaml, 'a')
+          @issues_missing_changeset << log_entry(issue)
           next
         end
 
@@ -45,7 +48,7 @@ module ToolBelt
         end
 
         if revisions.empty?
-          write_log_file("#{release}", "cherrypick_not_needed_#{release}", log_entry(issue).to_yaml, 'a')
+          @issues_cherrypick_not_needed << log_entry(issue)
           next
         end
 
@@ -59,10 +62,17 @@ module ToolBelt
 
     def write_cherry_pick_log(picks, release)
       picks = picks.sort_by { |p| [p['repository'], p['closed']] }.group_by { |h| h['repository'] }.each { |k,v| v.each { |x| x.delete('repository') } }
-      write_log_file("#{release}", "cherry_picks_#{release}", picks.to_yaml)
 
       ignored_picks = Hash[picks.collect { |k,v| [k, v.select { |h| ignore?(h['redmine']['id']) }] }].reject { |k,v| v.empty? }
-      write_log_file("#{release}", "ignored_picks_#{release}", ignored_picks.to_yaml)
+
+      output = {
+        'Open Redmine' => @issues_open_redmine,
+        'Missing Changeset' => @issues_missing_changeset,
+        'Ignored Issues' => ignored_picks,
+        'Cherrypick Not Needed' => @issues_cherrypick_not_needed,
+        'Cherrypick Needed' => picks
+      }.reject{ |k,v| v.empty? }
+      write_log_file("#{release}", "cherry_picks_#{release}", output.to_yaml)
     end
 
     private
