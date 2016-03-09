@@ -12,7 +12,7 @@ module ToolBelt
     end
 
     def setup(args = {})
-      github_username = args.fetch(:github_username, nil)
+      gitlab_username = args.fetch(:gitlab_username, nil)
 
       Dir.mkdir("repos") unless File.exist?("repos")
       Dir.mkdir(release_directory) unless File.exist?(release_directory)
@@ -20,9 +20,9 @@ module ToolBelt
       Dir.chdir(release_directory) do
         @repos.each do |name, repo|
           @systools.execute("git clone #{repo[:repo]} #{name}") if !File.exist?(name.to_s)
-          if github_username
+          if gitlab_username
             Dir.chdir(name.to_s) do
-              @systools.execute("git remote add #{github_username} #{repository_fork(github_username, repo[:repo])}")
+              @systools.execute("git remote add #{gitlab_username} #{repository_fork(gitlab_username, repo[:repo])}")
             end
           end
           Dir.chdir(name.to_s) do
@@ -100,7 +100,7 @@ module ToolBelt
     def repository_fork(username, repo)
       url = URI.parse(repo)
       repo_name = url.path.split('/').last
-      "#{url.scheme}://#{url.host}/#{username}/#{repo_name}"
+      "git@#{url.host}:#{username}/#{repo_name}"
     end
 
   end
