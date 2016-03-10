@@ -8,18 +8,24 @@ require File.join(File.dirname(__FILE__), 'systools')
 module ToolBelt
   class CherryPicker
 
-    attr_accessor :bugzilla, :ignores, :issues, :release_environment,
-                  :issues_open_redmine, :issues_missing_changeset, :issues_cherrypick_not_needed
+    attr_accessor :bugzilla, :bugzilla_bugs, :bugzilla_bugs_missing_redmine_url,
+                  :redmine_issues, :redmine_issues_open, :redmine_issues_missing_changeset, :redmine_issues_cherrypick_not_needed,
+                  :ignores, :release_environment
 
-    def initialize(config, release_environment, issues)
+    def initialize(config, release_environment, bugzilla_bugs)
       self.bugzilla = config.bugzilla || false
-      self.ignores = config.ignores || []
-      self.issues = issues
-      self.release_environment = release_environment
+      self.bugzilla_bugs = bugzilla_bugs['result']['bugs']
+      self.bugzilla_bugs_missing_redmine_url = []
 
-      self.issues_open_redmine = []
-      self.issues_missing_changeset = []
-      self.issues_cherrypick_not_needed = []
+      self.redmine_issues = []
+      self.redmine_issues_open = []
+      self.redmine_issues_missing_changeset = []
+      self.redmine_issues_cherrypick_not_needed = []
+
+      find_redmine_issues(self.bugzilla_bugs)
+
+      self.ignores = config.ignores || []
+      self.release_environment = release_environment
 
       picks = find_cherry_picks(config.project, config.release, release_environment.repo_names)
       write_cherry_pick_log(picks, config.release)
@@ -28,16 +34,16 @@ module ToolBelt
     def find_cherry_picks(project, release, repo_names)
       picks = []
 
-      open_issues = @issues.select { |issue| issue['closed_on'].nil? }
-      open_issues.each { |issue| @issues_open_redmine << log_entry(issue) }
+      open_issues = @redmine_issues.select { |issue| issue['closed_on'].nil? }
+      open_issues.each { |issue| @redmine_issues_open << log_entry(issue) }
 
-      closed_issues = @issues.select { |issue| !issue['closed_on'].nil? }
+      closed_issues = @redmine_issues.select { |issue| !issue['closed_on'].nil? }
       closed_issues.each do |issue|
         revisions = []
         commits = issue['changesets']
 
         if commits.empty?
-          @issues_missing_changeset << log_entry(issue)
+          @redmine_issues_missing_changeset << log_entry(issue)
           next
         end
 
@@ -48,7 +54,7 @@ module ToolBelt
         end
 
         if revisions.empty?
-          @issues_cherrypick_not_needed << log_entry(issue)
+          @redmine_issues_cherrypick_not_needed << log_entry(issue)
           next
         end
 
@@ -66,16 +72,28 @@ module ToolBelt
       ignored_picks = Hash[picks.collect { |k,v| [k, v.select { |h| ignore?(h['redmine']['id']) }] }].reject { |k,v| v.empty? }
 
       output = {
-        'Open Redmine' => @issues_open_redmine,
-        'Missing Changeset' => @issues_missing_changeset,
-        'Ignored Issues' => ignored_picks,
-        'Cherrypick Not Needed' => @issues_cherrypick_not_needed,
-        'Cherrypick Needed' => picks
+        'Bugzilla Bugs' => self.bugzilla_bugs.collect { |bz_bug| {'id' => bz_bug['id']} }.sort_by { |bug| bug['id'] },
+        'Bugzilla Bugs Missing Redmine Url' => self.bugzilla_bugs_missing_redmine_url.collect { |bz_bug| {'id' => bz_bug['id'], 'assigned_to' => bz_bug['assigned_to']} }.sort_by { |bug| bug['id'] },
+        'Redmine Issues Open' => @redmine_issues_open.sort_by { |issue| issue['closed'] },
+        'Redmine Issues Missing Changeset' => @redmine_issues_missing_changeset.sort_by { |issue| issue['closed'] },
+        'Redmine Issues Ignored' => ignored_picks,
+        'Redmine Issues Cherrypick Not Needed' => @redmine_issues_cherrypick_not_needed.sort_by { |issue| issue['closed'] },
+        'Redmine Issues Cherrypick Needed' => picks
       }.reject{ |k,v| v.empty? }
       write_log_file("#{release}", "cherry_picks_#{release}", output.to_yaml)
     end
 
     private
+
+    def find_redmine_issues(bugzilla_bugs)
+      bugzilla_bugs.each do |bz_bug|
+        if bz_bug['url'].empty?
+          self.bugzilla_bugs_missing_redmine_url << bz_bug
+        else
+          self.redmine_issues << Redmine::Issue.new(bz_bug['url'].split('/').last, :include => 'changesets').raw_data['issue']
+        end
+      end
+    end
 
     def cherry_pick(issue, revision)
       { 'repository' => find_repository(revision),
