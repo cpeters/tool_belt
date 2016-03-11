@@ -72,15 +72,9 @@ module ToolBelt
           puts @username
           bz = RedHatBugzilla.new(username, password)
 
-          bugs = bz.get_needs_cherry_pick
-          redmine_urls = bugs["bugs"].collect { |bug| bug['url'] }
-          redmine_urls = redmine_urls.reject(&:empty?)
+          bugzilla_bugs = bz.get_needs_cherry_pick
 
-          issues = redmine_urls.collect do |issue|
-            Redmine::Issue.new(issue.split('/').last, :include => 'changesets').raw_data['issue']
-          end
-
-          ToolBelt::CherryPicker.new(config.options, release_environment, issues)
+          ToolBelt::CherryPicker.new(config.options, release_environment, bugzilla_bugs)
         end
 
       end
